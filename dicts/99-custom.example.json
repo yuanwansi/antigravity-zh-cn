@@ -1,0 +1,5 @@
+{
+  "_meta": "用户自定义覆盖词典示例：将其复制到 ~/.antigravity-zh-cn/custom-dict.json 即可在客户端启动时自动生效，官方更新也不丢失",
+  "New Conversation": "开启新对话",
+  "Ask anything...": "有什么我可以帮你的？"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "antigravity-zh-cn",
+  "displayName": "Antigravity 中文助手",
+  "version": "1.0.0",
+  "description": "为 Google Antigravity 提供全局简体中文交互规范与本地化词典维护技能，无需修改客户端本体即可保持全中文对话、计划与总结体验。",
+  "logo": "assets/logo.svg",
+  "author": {
+    "name": "yuanwansi",
+    "url": "https://github.com/yuanwansi"
+  },
+  "repository": "https://github.com/yuanwansi/antigravity-zh-cn",
+  "suggestedPrompts": [
+    "帮我检查当前项目的中文词典是否有重复或违规词条",
+    "帮我把新版本的英文界面文案补充到对应的中文词典分包中",
+    "用简体中文总结当前代码库的架构与近期变更"
+  ]
+}

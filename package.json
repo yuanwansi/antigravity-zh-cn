@@ -1,0 +1,37 @@
+{
+  "name": "antigravity-zh-cn",
+  "version": "1.0.0",
+  "description": "Google Antigravity 桌面端动态中文汉化引擎与官方标准中文插件（零依赖、安全备份、无损还原）",
+  "main": "src/patcher.js",
+  "bin": {
+    "antigravity-zh-cn": "bin/cli.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "install:cn": "node bin/cli.js install",
+    "restore:en": "node bin/cli.js restore",
+    "status": "node bin/cli.js status",
+    "check:dict": "node bin/cli.js check-dict",
+    "plugin:install": "node bin/cli.js install-plugin",
+    "plugin:uninstall": "node bin/cli.js uninstall-plugin",
+    "test": "node --test test"
+  },
+  "keywords": [
+    "antigravity",
+    "google-antigravity",
+    "chinese",
+    "zh-cn",
+    "i18n",
+    "localization",
+    "plugin"
+  ],
+  "author": "yuanwansi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yuanwansi/antigravity-zh-cn.git"
+  },
+  "homepage": "https://github.com/yuanwansi/antigravity-zh-cn#readme"
+}

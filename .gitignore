@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+*.zh-cn.bak
+*.zh-cn.tmp
+*.zh-cn.swap-old
+*.zh-cn.meta.json
