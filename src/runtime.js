@@ -161,6 +161,34 @@ const DYNAMIC_RULES = [
     pattern: /^(\d+)% remaining$/i,
     replace: (_, pct) => `剩余 ${pct}%`,
   },
+  {
+    pattern: /^Welcome back,\s*(.+?)\.\s*Where should we pick up\?$/i,
+    replace: (_, name) => `欢迎回来，${name}。我们从哪里继续？`,
+  },
+  {
+    pattern: /^Welcome back,\s*(.+?)\.\s*What are we building today\?$/i,
+    replace: (_, name) => `欢迎回来，${name}。今天想构建点什么？`,
+  },
+  {
+    pattern: /^Welcome back,\s*(.+?)[.!]?$/i,
+    replace: (_, name) => `欢迎回来，${name}`,
+  },
+  {
+    pattern: /^Good morning,\s*(.+?)[.!]?$/i,
+    replace: (_, name) => `早上好，${name}`,
+  },
+  {
+    pattern: /^Good afternoon,\s*(.+?)[.!]?$/i,
+    replace: (_, name) => `下午好，${name}`,
+  },
+  {
+    pattern: /^Good evening,\s*(.+?)[.!]?$/i,
+    replace: (_, name) => `晚上好，${name}`,
+  },
+  {
+    pattern: /^(?:Hi|Hello),\s*(.+?)\.\s*What can I help you with\?$/i,
+    replace: (_, name) => `你好，${name}。有什么我可以帮你的？`,
+  },
 ];
 
 /**

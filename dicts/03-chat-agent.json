@@ -81,5 +81,8 @@
   "Agent encountered an internal error.": "智能体遇到内部错误.",
   "Agent execution failed.": "智能体执行失败.",
   "Agent Hooks Configuration": "智能体钩子配置",
-  "Message from Parent Agent": "来自父级智能体的消息"
+  "Message from Parent Agent": "来自父级智能体的消息",
+  "Build me a web app": "帮我构建一个 Web 应用",
+  "Add a Gemini feature to my app": "为我的应用添加 Gemini 功能",
+  "Bring over my setup from other Agentic Developer Tools": "从其他 AI 开发工具迁移我的配置"
 }

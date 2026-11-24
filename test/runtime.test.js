@@ -56,6 +56,11 @@ test('翻译器：动态正则模板正确处理计数、耗时与额度重置�
   assert.equal(translator.translateText('Retry in 12s'), '12 秒后重试');
   assert.equal(translator.translateText('Version 2.35.0'), '版本 2.35.0');
   assert.equal(translator.translateText('75% remaining'), '剩余 75%');
+  assert.equal(
+    translator.translateText('Welcome back, 院丸寺. Where should we pick up?'),
+    '欢迎回来，院丸寺。我们从哪里继续？'
+  );
+  assert.equal(translator.translateText('Good evening, Alex!'), '晚上好，Alex');
 });
 
 test('禁区隔离与独立控件守卫：保护代码块、用户输入、文件树与图标字体', () => {
