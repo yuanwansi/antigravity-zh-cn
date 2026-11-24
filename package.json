@@ -1,6 +1,6 @@
 {
   "name": "antigravity-zh-cn",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Google Antigravity 桌面端动态中文汉化引擎与官方标准中文插件（零依赖、安全备份、无损还原）",
   "main": "src/patcher.js",
   "bin": {
@@ -16,7 +16,7 @@
     "check:dict": "node bin/cli.js check-dict",
     "plugin:install": "node bin/cli.js install-plugin",
     "plugin:uninstall": "node bin/cli.js uninstall-plugin",
-    "test": "node --test test/asar.test.js test/dict.test.js test/runtime.test.js test/patcher.test.js"
+    "test": "node --test test/asar.test.js test/dict.test.js test/runtime.test.js test/main-patches.test.js test/patcher.test.js"
   },
   "keywords": [
     "antigravity",

@@ -6,6 +6,7 @@ const path = require('node:path');
 const { loadDictionaries } = require('../src/dict-loader');
 const {
   createTranslator,
+  isAllowedLocalizationOrigin,
   shouldSkipElement,
   isIsolatedUiControl,
 } = require('../src/runtime');
@@ -61,6 +62,54 @@ test('翻译器：动态正则模板正确处理计数、耗时与额度重置�
     '欢迎回来，院丸寺。我们从哪里继续？'
   );
   assert.equal(translator.translateText('Good evening, Alex!'), '晚上好，Alex');
+  assert.equal(translator.translateText('2 agents running'), '2 个智能体运行中');
+  assert.equal(translator.translateText('Updated 5m ago'), '更新于 5 分钟前');
+  assert.equal(translator.translateText('Every Monday at 9:00 AM'), '每周一 9:00 AM');
+
+  // 长句词边界局部替换验证
+  const longTranslator = createTranslator({
+    entries: {
+      'Configure global allowed and denied resource permissions.': '配置全局允许和拒绝的资源访问权限。',
+    },
+    isolatedKeys: [],
+  });
+  assert.equal(
+    longTranslator.translateText('Configure global allowed and denied resource permissions. Learn more.'),
+    '配置全局允许和拒绝的资源访问权限。 Learn more.'
+  );
+  // 处于对话散文段落（inProse: true）中时不触发动态模板或长句替换
+  assert.equal(
+    longTranslator.translateText('Configure global allowed and denied resource permissions. Learn more.', { inProse: true }),
+    null
+  );
+});
+
+test('域名安全边界与 React 独立叶节点标签检测', () => {
+  assert.equal(isAllowedLocalizationOrigin({ protocol: 'http:', hostname: '127.0.0.1' }), true);
+  assert.equal(isAllowedLocalizationOrigin({ protocol: 'http:', hostname: 'localhost' }), true);
+  assert.equal(isAllowedLocalizationOrigin({ protocol: 'plugin:', hostname: 'swarm' }), true);
+  assert.equal(isAllowedLocalizationOrigin({ protocol: 'https:', hostname: 'github.com' }), false);
+  assert.equal(isAllowedLocalizationOrigin({ protocol: 'https:', hostname: 'antigravity.google' }), false);
+
+  // React/Tailwind 独立 <div>Models</div> 叶节点应识别为独立 UI 标签
+  const reactLeafDiv = {
+    tagName: 'DIV',
+    className: 'text-sm font-medium',
+    textContent: 'Models',
+    childNodes: [{ nodeType: 3 }],
+    closest: () => null,
+  };
+  assert.equal(isIsolatedUiControl(reactLeafDiv), true);
+
+  // 但位于 .prose 或 agent-message 中的 span 绝不能当作独立控件
+  const proseSpan = {
+    tagName: 'SPAN',
+    className: '',
+    textContent: 'Save',
+    childNodes: [{ nodeType: 3 }],
+    closest: (sel) => (sel === '.prose' ? {} : null),
+  };
+  assert.equal(isIsolatedUiControl(proseSpan), false);
 });
 
 test('禁区隔离与独立控件守卫：保护代码块、用户输入、文件树与图标字体', () => {

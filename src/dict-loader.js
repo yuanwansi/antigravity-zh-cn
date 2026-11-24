@@ -19,6 +19,7 @@ const FORBIDDEN_WILDCARD_WORDS = new Set([
   'a', 'an', 'the', 'in', 'on', 'at', 'to', 'of', 'for', 'by', 'as', 'is', 'are',
   'was', 'were', 'be', 'do', 'does', 'did', 'will', 'would', 'can', 'could', 'or',
   'and', 'not', 'no', 'if', 'it', 'we', 'you', 'my', 'your', 'this', 'that',
+  'from', 'with', 'into',
   'plugin', 'skill', 'command', 'automation', 'git', 'npm', 'node', 'code',
 ]);
 
@@ -28,7 +29,11 @@ const FORBIDDEN_WILDCARD_WORDS = new Set([
  * @returns {string}
  */
 function normalizeKey(text) {
-  return String(text).replace(/\s+/g, ' ').trim();
+  return String(text)
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**

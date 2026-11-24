@@ -4,11 +4,11 @@
  * Antigravity 桌面端动态汉化运行时引擎（注入至 Electron preload.js 执行）。
  *
  * 核心特性：
- * 1. 全方位内容禁区隔离：自动跳过聊天用户输入、思考正文、代码块、文件树、路径、终端与图标字体。
- * 2. 独立控件守卫：短词/单词仅在独立 UI 控件（按钮、菜单项、标签页、表头、表单标签等）中生效，绝不污染段落正文。
- * 3. 动态模板匹配：针对含数字、时长、文件数、重置倒计时等动态状态提供正则翻译。
- * 4. 实时中/英热切换：内置 `Alt + Shift + L` 快捷键，使用 WeakMap 保存原文，无需重启客户端即可无损切回英文。
- * 5. 双模式导出：既可在浏览器/Electron preload 中自动启动，也可在 Node.js 单元测试中直接 `require` 验证逻辑。
+ * 1. 域名与协议边界保护：仅在本地客户端与 `plugin:` 页面启用，绝不触碰外部网页。
+ * 2. 全方位内容禁区隔离：自动跳过聊天用户输入、模型回复/Markdown 正文、思考正文、代码块、文件树、路径、终端与图标字体。
+ * 3. 智能独立控件守卫：既覆盖语义按钮/菜单，也覆盖 React/Tailwind 的独立 `<div>`/`<span>` 标签/徽章，同时严格拦截散文段落内的单字误译。
+ * 4. 长句词边界局部替换 + 35+ 动态模板正则：处理混合标点说明文案、动态欢迎语、耗时、Git 状态、定时调度与额度倒计时。
+ * 5. 同源 `<iframe>` 自动穿透 + `Alt + Shift + L` 实时中/英热切换。
  */
 
 const STORAGE_KEY = 'antigravity_zh_cn_enabled';
@@ -31,10 +31,16 @@ const SKIP_ANCESTOR_SELECTORS = [
   'style',
   'noscript',
   'svg',
+  'canvas',
   'math',
   '.monaco-editor',
+  '.editor-container',
+  '.suggest-widget',
   '.xterm',
   '.xterm-screen',
+  '.terminal',
+  '.output-view',
+  '.debug-console',
   '.code-block',
   '.code-line',
   '.line-content',
@@ -49,7 +55,22 @@ const SKIP_ANCESTOR_SELECTORS = [
 ];
 
 /**
- * 独立 UI 控件选择器：短词/单字仅在命中这些控件时翻译。
+ * 对话/文档散文容器选择器：其中的单字短词绝不当作 UI 按钮翻译。
+ */
+const PROSE_CONTAINER_SELECTORS = [
+  '[data-testid="agent-message"]',
+  '[data-testid="agent-response"]',
+  '.prose',
+  '.markdown',
+  '.markdown-body',
+  'p',
+  'li',
+  'blockquote',
+  'article',
+];
+
+/**
+ * 显式语义化独立 UI 控件选择器。
  */
 const ISOLATED_CONTROL_SELECTORS = [
   'button',
@@ -64,6 +85,8 @@ const ISOLATED_CONTROL_SELECTORS = [
   'h2',
   'h3',
   'h4',
+  'h5',
+  'h6',
   '[role="button"]',
   '[role="menuitem"]',
   '[role="menuitemcheckbox"]',
@@ -78,89 +101,32 @@ const ISOLATED_CONTROL_SELECTORS = [
 ];
 
 /**
- * 动态模板正则规则（按顺序匹配，全部采用全串锚定 `^...$` 防止误伤正文）。
+ * 独立叶节点标签标签名集合（React/Tailwind 常用于构建侧边栏项、状态徽章、分组标题）。
+ */
+const STANDALONE_LEAF_TAGS = new Set(['DIV', 'SPAN', 'TD', 'DD', 'HEADER', 'NAV', 'ASIDE']);
+
+const WEEKDAY_MAP = {
+  monday: '周一',
+  tuesday: '周二',
+  wednesday: '周三',
+  thursday: '周四',
+  friday: '周五',
+  saturday: '周六',
+  sunday: '周日',
+  mon: '周一',
+  tue: '周二',
+  wed: '周三',
+  thu: '周四',
+  fri: '周五',
+  sat: '周六',
+  sun: '周日',
+};
+
+/**
+ * 动态模板正则规则（全部采用全串锚定 `^...$`，防止误伤普通句子）。
  */
 const DYNAMIC_RULES = [
-  {
-    pattern: /^Working for (\d+)m (\d+)s$/i,
-    replace: (_, m, s) => `工作中 ${m} 分 ${s} 秒`,
-  },
-  {
-    pattern: /^Working for (\d+)s$/i,
-    replace: (_, s) => `工作中 ${s} 秒`,
-  },
-  {
-    pattern: /^Worked for (\d+)m (\d+)s$/i,
-    replace: (_, m, s) => `已工作 ${m} 分 ${s} 秒`,
-  },
-  {
-    pattern: /^Worked for (\d+)s$/i,
-    replace: (_, s) => `已工作 ${s} 秒`,
-  },
-  {
-    pattern: /^(\d+) seconds? ago$/i,
-    replace: (_, n) => `${n} 秒前`,
-  },
-  {
-    pattern: /^(\d+) minutes? ago$/i,
-    replace: (_, n) => `${n} 分钟前`,
-  },
-  {
-    pattern: /^(\d+) hours? ago$/i,
-    replace: (_, n) => `${n} 小时前`,
-  },
-  {
-    pattern: /^(\d+) days? ago$/i,
-    replace: (_, n) => `${n} 天前`,
-  },
-  {
-    pattern: /^(\d+) files? changed$/i,
-    replace: (_, n) => `已变更 ${n} 个文件`,
-  },
-  {
-    pattern: /^(\d+) results?$/i,
-    replace: (_, n) => `${n} 条结果`,
-  },
-  {
-    pattern: /^(\d+) items?$/i,
-    replace: (_, n) => `${n} 项`,
-  },
-  {
-    pattern: /^(\d+) selected$/i,
-    replace: (_, n) => `已选择 ${n} 项`,
-  },
-  {
-    pattern: /^Page (\d+) of (\d+)$/i,
-    replace: (_, cur, total) => `第 ${cur} / ${total} 页`,
-  },
-  {
-    pattern: /^Version ([\w.-]+)$/i,
-    replace: (_, ver) => `版本 ${ver}`,
-  },
-  {
-    pattern: /^Retry in (\d+)s$/i,
-    replace: (_, s) => `${s} 秒后重试`,
-  },
-  {
-    pattern: /^Resets in (\d+)h (\d+)m$/i,
-    replace: (_, h, m) => `${h} 小时 ${m} 分钟后重置`,
-  },
-  {
-    pattern: /^Resets in (\d+)m$/i,
-    replace: (_, m) => `${m} 分钟后重置`,
-  },
-  {
-    pattern: /^Quota resets in (\d+)h (\d+)m$/i,
-    replace: (_, h, m) => `额度将在 ${h} 小时 ${m} 分钟后重置`,
-  },
-  {
-    pattern: /^(\d+)% used$/i,
-    replace: (_, pct) => `已使用 ${pct}%`,
-  },
-  {
-    pattern: /^(\d+)% remaining$/i,
-    replace: (_, pct) => `剩余 ${pct}%`,
-  },
+  // 1. 欢迎页动态问候语
   {
     pattern: /^Welcome back,\s*(.+?)\.\s*Where should we pick up\?$/i,
     replace: (_, name) => `欢迎回来，${name}。我们从哪里继续？`,
@@ -189,19 +155,229 @@ const DYNAMIC_RULES = [
     pattern: /^(?:Hi|Hello),\s*(.+?)\.\s*What can I help you with\?$/i,
     replace: (_, name) => `你好，${name}。有什么我可以帮你的？`,
   },
+
+  // 2. 运行/思考/检索耗时状态
+  {
+    pattern: /^Working for (\d+)h (\d+)m$/i,
+    replace: (_, h, m) => `工作中 ${h} 小时 ${m} 分钟`,
+  },
+  {
+    pattern: /^Working for (\d+)m (\d+)s$/i,
+    replace: (_, m, s) => `工作中 ${m} 分 ${s} 秒`,
+  },
+  {
+    pattern: /^Working for (\d+)s$/i,
+    replace: (_, s) => `工作中 ${s} 秒`,
+  },
+  {
+    pattern: /^Worked for (\d+)h (\d+)m$/i,
+    replace: (_, h, m) => `已工作 ${h} 小时 ${m} 分钟`,
+  },
+  {
+    pattern: /^Worked for (\d+)m (\d+)s$/i,
+    replace: (_, m, s) => `已工作 ${m} 分 ${s} 秒`,
+  },
+  {
+    pattern: /^Worked for (\d+)s$/i,
+    replace: (_, s) => `已工作 ${s} 秒`,
+  },
+  {
+    pattern: /^Thought for (\d+)m (\d+)s$/i,
+    replace: (_, m, s) => `已思考 ${m} 分 ${s} 秒`,
+  },
+  {
+    pattern: /^Thought for (\d+)s$/i,
+    replace: (_, s) => `已思考 ${s} 秒`,
+  },
+  {
+    pattern: /^Thinking for (\d+)s$/i,
+    replace: (_, s) => `思考中 ${s} 秒`,
+  },
+
+  // 3. 相对时间与更新时间戳
+  {
+    pattern: /^(?:Updated\s+)?(\d+)\s*(?:seconds?|secs?|s)\s+ago$/i,
+    replace: (full, n) => (/^Updated/i.test(full) ? `更新于 ${n} 秒前` : `${n} 秒前`),
+  },
+  {
+    pattern: /^(?:Updated\s+)?(\d+)\s*(?:minutes?|mins?|m)\s+ago$/i,
+    replace: (full, n) => (/^Updated/i.test(full) ? `更新于 ${n} 分钟前` : `${n} 分钟前`),
+  },
+  {
+    pattern: /^(?:Updated\s+)?(\d+)\s*(?:hours?|hrs?|h)\s+ago$/i,
+    replace: (full, n) => (/^Updated/i.test(full) ? `更新于 ${n} 小时前` : `${n} 小时前`),
+  },
+  {
+    pattern: /^(?:Updated\s+)?(\d+)\s*(?:days?|d)\s+ago$/i,
+    replace: (full, n) => (/^Updated/i.test(full) ? `更新于 ${n} 天前` : `${n} 天前`),
+  },
+
+  // 4. 计数、文件变更、Git 与智能体状态
+  {
+    pattern: /^(\d+)\s+agents?\s+running$/i,
+    replace: (_, n) => `${n} 个智能体运行中`,
+  },
+  {
+    pattern: /^(\d+)\s+files?\s+changed$/i,
+    replace: (_, n) => `已变更 ${n} 个文件`,
+  },
+  {
+    pattern: /^(\d+)\s+commits?\s+ahead$/i,
+    replace: (_, n) => `领先 ${n} 个提交`,
+  },
+  {
+    pattern: /^(\d+)\s+commits?\s+behind$/i,
+    replace: (_, n) => `落后 ${n} 个提交`,
+  },
+  {
+    pattern: /^(\d+)\s+conversations?$/i,
+    replace: (_, n) => `${n} 个对话`,
+  },
+  {
+    pattern: /^(\d+)\s+projects?$/i,
+    replace: (_, n) => `${n} 个项目`,
+  },
+  {
+    pattern: /^(\d+)\s+tasks?$/i,
+    replace: (_, n) => `${n} 个任务`,
+  },
+  {
+    pattern: /^(\d+)\s+subagents?$/i,
+    replace: (_, n) => `${n} 个子智能体`,
+  },
+  {
+    pattern: /^(\d+)\s+skills?$/i,
+    replace: (_, n) => `${n} 个技能`,
+  },
+  {
+    pattern: /^(\d+)\s+rules?$/i,
+    replace: (_, n) => `${n} 个规则`,
+  },
+  {
+    pattern: /^(\d+)\s+plugins?$/i,
+    replace: (_, n) => `${n} 个插件`,
+  },
+  {
+    pattern: /^(\d+)\s+tools?$/i,
+    replace: (_, n) => `${n} 个工具`,
+  },
+  {
+    pattern: /^(\d+)\s+comments?$/i,
+    replace: (_, n) => `${n} 条评论`,
+  },
+  {
+    pattern: /^(\d+)\s+results?$/i,
+    replace: (_, n) => `${n} 条结果`,
+  },
+  {
+    pattern: /^(\d+)\s+items?$/i,
+    replace: (_, n) => `${n} 项`,
+  },
+  {
+    pattern: /^(\d+)\s+selected$/i,
+    replace: (_, n) => `已选择 ${n} 项`,
+  },
+  {
+    pattern: /^Page\s+(\d+)\s+of\s+(\d+)$/i,
+    replace: (_, cur, total) => `第 ${cur} / ${total} 页`,
+  },
+
+  // 5. 版本、重试、额度重置与积分
+  {
+    pattern: /^Version\s+([\w.-]+)$/i,
+    replace: (_, ver) => `版本 ${ver}`,
+  },
+  {
+    pattern: /^Retry in (\d+)s$/i,
+    replace: (_, s) => `${s} 秒后重试`,
+  },
+  {
+    pattern: /^(?:Baseline\s+)?Quota\s+(?:resets|refreshes)\s+in\s+(\d+)h\s+(\d+)m$/i,
+    replace: (_, h, m) => `额度将在 ${h} 小时 ${m} 分钟后重置`,
+  },
+  {
+    pattern: /^(?:Baseline\s+)?Quota\s+(?:resets|refreshes)\s+in\s+(\d+)m$/i,
+    replace: (_, m) => `额度将在 ${m} 分钟后重置`,
+  },
+  {
+    pattern: /^Resets in (\d+)h (\d+)m$/i,
+    replace: (_, h, m) => `${h} 小时 ${m} 分钟后重置`,
+  },
+  {
+    pattern: /^Resets in (\d+)m$/i,
+    replace: (_, m) => `${m} 分钟后重置`,
+  },
+  {
+    pattern: /^(\d+(?:,\d{3})*)\s+credits?\s+remaining$/i,
+    replace: (_, n) => `剩余 ${n} 积分`,
+  },
+  {
+    pattern: /^(\d+)%\s+used$/i,
+    replace: (_, pct) => `已使用 ${pct}%`,
+  },
+  {
+    pattern: /^(\d+)%\s+remaining$/i,
+    replace: (_, pct) => `剩余 ${pct}%`,
+  },
+
+  // 6. 自动化与定时调度描述
+  {
+    pattern: /^Every\s+(\d+)\s+minutes?$/i,
+    replace: (_, n) => `每 ${n} 分钟`,
+  },
+  {
+    pattern: /^Every\s+(\d+)\s+hours?$/i,
+    replace: (_, n) => `每 ${n} 小时`,
+  },
+  {
+    pattern: /^Every\s+day\s+at\s+([\d:]+\s*(?:AM|PM)?)$/i,
+    replace: (_, t) => `每天 ${t}`,
+  },
+  {
+    pattern: /^Every\s+(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+at\s+([\d:]+\s*(?:AM|PM)?)$/i,
+    replace: (_, day, t) => `每${WEEKDAY_MAP[day.toLowerCase()] || day} ${t}`,
+  },
 ];
 
 /**
- * 规范化待匹配文本（合并连续空白并去首尾空格）。
+ * 判断当前页面是否属于允许执行本地化的客户端上下文（排除外部互联网网页）。
+ * @param {Location|undefined} [loc]
+ * @returns {boolean}
+ */
+function isAllowedLocalizationOrigin(loc) {
+  if (!loc) return true;
+  const protocol = String(loc.protocol || '').toLowerCase();
+  if (!protocol || protocol === 'plugin:' || protocol === 'file:' || protocol === 'about:') {
+    return true;
+  }
+  if (protocol === 'http:' || protocol === 'https:') {
+    const host = String(loc.hostname || '').toLowerCase();
+    return (
+      host === '127.0.0.1' ||
+      host === 'localhost' ||
+      host === '[::1]' ||
+      host === '::1' ||
+      host.endsWith('.localhost')
+    );
+  }
+  return false;
+}
+
+/**
+ * 规范化待匹配文本（统一弯引号、合并连续空白并去首尾空格）。
  * @param {string} text
  * @returns {string}
  */
 function normalizeText(text) {
-  return String(text).replace(/\s+/g, ' ').trim();
+  return String(text)
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
- * 判断某个节点是否应该被跳过（位于禁区或不可翻译元素内）。
+ * 判断某个节点是否应该被跳过（位于代码、用户输入、文件树、终端或图标字体禁区内）。
  * @param {Element|null} element
  * @returns {boolean}
  */
@@ -222,23 +398,18 @@ function shouldSkipElement(element) {
 }
 
 /**
- * 判断节点是否属于独立 UI 控件标签（用于放行短词/单字翻译）。
+ * 判断节点是否位于对话消息或 Markdown 正文容器中。
  * @param {Element|null} element
  * @returns {boolean}
  */
-function isIsolatedUiControl(element) {
+function isInProseOrMessageContainer(element) {
   if (!element || typeof element.closest !== 'function') {
     return false;
   }
-  for (const selector of ISOLATED_CONTROL_SELECTORS) {
+  for (const selector of PROSE_CONTAINER_SELECTORS) {
     try {
-      const host = element.closest(selector);
-      if (host) {
-        const textLen = (host.textContent || '').trim().length;
-        // 仅当控件自身文本简洁时才视为独立标签，避免大段落容器误匹配
-        if (textLen > 0 && textLen <= 48) {
-          return true;
-        }
+      if (element.closest(selector)) {
+        return true;
       }
     } catch {
       // 忽略选择器异常
@@ -248,13 +419,105 @@ function isIsolatedUiControl(element) {
 }
 
 /**
- * 创建一个纯粹的翻译器实例（支持精确匹配、大小写回退、独立控件守卫与动态模板）。
+ * 判断节点是否属于独立 UI 控件或独立界面标签（用于放行短词/单字翻译，同时保护正文段落）。
+ * @param {Element|null} element
+ * @returns {boolean}
+ */
+function isIsolatedUiControl(element) {
+  if (!element || typeof element.closest !== 'function') {
+    return false;
+  }
+
+  // 1. 位于聊天回复、Markdown 段落、列表项或引用块中时，一律禁止单字短词替换
+  if (isInProseOrMessageContainer(element)) {
+    return false;
+  }
+
+  // 2. 命中语义化控件（button / menuitem / tab / heading / label 等）
+  for (const selector of ISOLATED_CONTROL_SELECTORS) {
+    try {
+      const host = element.closest(selector);
+      if (host) {
+        const textLen = (host.textContent || '').trim().length;
+        if (textLen > 0 && textLen <= 48) {
+          return true;
+        }
+      }
+    } catch {
+      // 忽略选择器异常
+    }
+  }
+
+  // 3. 命中常见徽章/胶囊/可点击样式类名
+  const cls = typeof element.className === 'string' ? element.className : '';
+  if (cls && /(?:badge|pill|chip|tag|status|cursor-pointer)/i.test(cls)) {
+    const textLen = (element.textContent || '').trim().length;
+    if (textLen > 0 && textLen <= 36) {
+      return true;
+    }
+  }
+
+  // 4. React/Tailwind 独立叶节点标签（如 `<div>Models</div>`、`<span>Idle</span>`）
+  const tag = element.tagName ? element.tagName.toUpperCase() : '';
+  if (STANDALONE_LEAF_TAGS.has(tag)) {
+    const childCount = element.childNodes ? element.childNodes.length : 99;
+    const textLen = (element.textContent || '').trim().length;
+    if (childCount <= 2 && textLen > 0 && textLen <= 32) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * 在长文本中按英文词边界安全替换长度 >= 24 的完整字典长句。
+ * @param {string} value
+ * @param {string} key
+ * @param {string} translated
+ * @returns {string|null}
+ */
+function replaceBoundedLongEntry(value, key, translated) {
+  if (!value || !key || !value.includes(key)) return null;
+  const asciiWord = /[A-Za-z0-9_]/;
+  const checkLeft = asciiWord.test(key[0]);
+  const checkRight = asciiWord.test(key[key.length - 1]);
+
+  let from = 0;
+  let out = '';
+  let changed = false;
+
+  while (from < value.length) {
+    const idx = value.indexOf(key, from);
+    if (idx === -1) {
+      out += value.slice(from);
+      break;
+    }
+    const end = idx + key.length;
+    const leftOk = !checkLeft || idx === 0 || !asciiWord.test(value[idx - 1]);
+    const rightOk = !checkRight || end === value.length || !asciiWord.test(value[end]);
+    if (leftOk && rightOk) {
+      out += value.slice(from, idx) + translated;
+      from = end;
+      changed = true;
+    } else {
+      out += value.slice(from, idx + 1);
+      from = idx + 1;
+    }
+  }
+
+  return changed ? out : null;
+}
+
+/**
+ * 创建一个纯粹的翻译器实例（支持精确匹配、大小写回退、独立控件守卫、动态模板与长句局部匹配）。
  * @param {{ entries: Record<string, string>, isolatedKeys?: string[] }} dictPayload
  */
 function createTranslator(dictPayload) {
   const exactMap = new Map();
   const lowerMap = new Map();
-  const isolatedSet = new Set(dictPayload.isolatedKeys || []);
+  const isolatedSet = new Set((dictPayload.isolatedKeys || []).map(normalizeText));
+  const longEntries = [];
 
   for (const [rawKey, val] of Object.entries(dictPayload.entries || {})) {
     const key = normalizeText(rawKey);
@@ -267,19 +530,24 @@ function createTranslator(dictPayload) {
     if (!dictPayload.isolatedKeys && key.length <= 12 && !key.includes(' ')) {
       isolatedSet.add(key);
     }
+    if (key.length >= 24) {
+      longEntries.push([key, val]);
+    }
   }
+
+  // 最长优先匹配，防止子句提前截断超集长句
+  longEntries.sort((a, b) => b[0].length - a[0].length);
 
   /**
    * 尝试翻译单段文本；未命中或被守卫拦截时返回 null。
    * @param {string} rawText
-   * @param {{ isIsolated?: boolean }} [ctx]
+   * @param {{ isIsolated?: boolean, inProse?: boolean }} [ctx]
    * @returns {string|null}
    */
   function translateText(rawText, ctx = {}) {
     if (typeof rawText !== 'string') return null;
     const normalized = normalizeText(rawText);
     if (!normalized || normalized.length > 1200) return null;
-    // 跳过纯数字、路径、URL、纯符号
     if (/^[\d\s.,:%/+-]+$/.test(normalized)) return null;
     if (/^(https?:\/\/|file:\/\/|[a-zA-Z]:\\|\/[\w.-]+)/.test(normalized)) return null;
 
@@ -291,7 +559,7 @@ function createTranslator(dictPayload) {
       return preserveOuterWhitespace(rawText, exactMap.get(normalized));
     }
 
-    // 2. 大小写不敏感回退（仅限非短词或独立控件）
+    // 2. 大小写不敏感回退
     const lowerHit = lowerMap.get(normalized.toLowerCase());
     if (lowerHit) {
       if (isolatedSet.has(lowerHit.key) && !ctx.isIsolated) {
@@ -300,12 +568,31 @@ function createTranslator(dictPayload) {
       return preserveOuterWhitespace(rawText, lowerHit.val);
     }
 
-    // 3. 动态正则模板
-    for (const rule of DYNAMIC_RULES) {
-      const match = normalized.match(rule.pattern);
-      if (match) {
-        const replaced = rule.replace(...match);
-        return preserveOuterWhitespace(rawText, replaced);
+    // 3. 动态正则模板（不在散文段落内触发，防止误改聊天内容）
+    if (!ctx.inProse) {
+      for (const rule of DYNAMIC_RULES) {
+        const match = normalized.match(rule.pattern);
+        if (match) {
+          const replaced = rule.replace(...match);
+          return preserveOuterWhitespace(rawText, replaced);
+        }
+      }
+    }
+
+    // 4. 长句词边界局部替换（仅限非散文 UI 文本，且文本长度 >= 24）
+    if (!ctx.inProse && normalized.length >= 24 && longEntries.length > 0) {
+      let current = normalized;
+      let anyChanged = false;
+      for (const [longKey, longVal] of longEntries) {
+        if (longKey.length > current.length) continue;
+        const next = replaceBoundedLongEntry(current, longKey, longVal);
+        if (next !== null) {
+          current = next;
+          anyChanged = true;
+        }
+      }
+      if (anyChanged) {
+        return preserveOuterWhitespace(rawText, current);
       }
     }
 
@@ -332,7 +619,6 @@ function preserveOuterWhitespace(original, translated) {
 
 /**
  * 尝试读取用户自定义覆盖词典（`~/.antigravity-zh-cn/custom-dict.json`）。
- * 在 sandboxed preload 或文件不存在时静默降级。
  * @returns {Record<string, string>}
  */
 function tryLoadUserCustomDict() {
@@ -364,6 +650,9 @@ function mountDomLocalization(dictPayload) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return null;
   }
+  if (!isAllowedLocalizationOrigin(window.location)) {
+    return null;
+  }
   if (window.__ANTIGRAVITY_ZH_CN_MOUNTED__) {
     return window.__ANTIGRAVITY_ZH_CN_API__;
   }
@@ -376,6 +665,7 @@ function mountDomLocalization(dictPayload) {
 
   const originalTextMap = new WeakMap();
   const originalAttrMap = new WeakMap();
+  const observedDocs = new WeakSet();
   const trackedNodes = new Set();
   const TRANSLATABLE_ATTRS = ['placeholder', 'data-placeholder', 'title', 'aria-label'];
 
@@ -395,8 +685,9 @@ function mountDomLocalization(dictPayload) {
     const current = node.nodeValue || '';
     if (!current.trim()) return;
 
-    const isIsolated = isIsolatedUiControl(parent);
-    const translated = translator.translateText(current, { isIsolated });
+    const inProse = isInProseOrMessageContainer(parent);
+    const isIsolated = !inProse && isIsolatedUiControl(parent);
+    const translated = translator.translateText(current, { isIsolated, inProse });
     if (translated && translated !== current) {
       if (!originalTextMap.has(node)) {
         originalTextMap.set(node, current);
@@ -416,7 +707,7 @@ function mountDomLocalization(dictPayload) {
     for (const attr of TRANSLATABLE_ATTRS) {
       const val = el.getAttribute(attr);
       if (!val || !val.trim()) continue;
-      const translated = translator.translateText(val, { isIsolated: true });
+      const translated = translator.translateText(val, { isIsolated: true, inProse: false });
       if (translated && translated !== val) {
         if (!attrOriginals) {
           attrOriginals = new Map();
@@ -431,6 +722,22 @@ function mountDomLocalization(dictPayload) {
     }
   }
 
+  function tryAttachIframe(iframeEl) {
+    if (!iframeEl || iframeEl.tagName !== 'IFRAME') return;
+    const mountFrame = () => {
+      try {
+        const subDoc = iframeEl.contentDocument;
+        const subWin = iframeEl.contentWindow;
+        if (!subDoc || !subWin || !isAllowedLocalizationOrigin(subWin.location)) return;
+        observeDocument(subDoc);
+      } catch {
+        // 跨域 iframe 静默忽略
+      }
+    };
+    mountFrame();
+    iframeEl.addEventListener('load', mountFrame);
+  }
+
   function translateSubtree(root) {
     if (!enabled || !root) return;
     if (root.nodeType === 3) {
@@ -440,15 +747,22 @@ function mountDomLocalization(dictPayload) {
     if (root.nodeType !== 1 && root.nodeType !== 9) return;
     if (root.nodeType === 1) {
       processElementAttrs(root);
+      if (root.tagName === 'IFRAME') {
+        tryAttachIframe(root);
+        return;
+      }
       if (shouldSkipElement(root)) return;
     }
 
     const doc = root.nodeType === 9 ? root : root.ownerDocument || document;
-    const walker = doc.createTreeWalker(root, 1 | 4); // SHOW_ELEMENT | SHOW_TEXT
+    const walker = doc.createTreeWalker(root, 1 | 4);
     let cur = walker.nextNode();
     while (cur) {
       if (cur.nodeType === 1) {
         processElementAttrs(cur);
+        if (cur.tagName === 'IFRAME') {
+          tryAttachIframe(cur);
+        }
       } else if (cur.nodeType === 3) {
         processTextNode(cur);
       }
@@ -486,7 +800,7 @@ function mountDomLocalization(dictPayload) {
     return enabled;
   }
 
-  let pendingRoots = new Set();
+  const pendingRoots = new Set();
   let rafScheduled = false;
 
   function flushPending() {
@@ -512,9 +826,11 @@ function mountDomLocalization(dictPayload) {
     }
   }
 
-  const startObserver = () => {
-    const target = document.body || document.documentElement;
+  function observeDocument(doc) {
+    if (!doc || observedDocs.has(doc)) return;
+    const target = doc.body || doc.documentElement;
     if (!target) return;
+    observedDocs.add(doc);
     if (enabled) {
       translateSubtree(target);
     }
@@ -541,6 +857,10 @@ function mountDomLocalization(dictPayload) {
         attributeFilter: TRANSLATABLE_ATTRS,
       });
     }
+  }
+
+  const startObserver = () => {
+    observeDocument(document);
   };
 
   if (document.readyState === 'loading') {
@@ -558,7 +878,7 @@ function mountDomLocalization(dictPayload) {
   });
 
   const api = {
-    version: '1.0.0',
+    version: '1.2.0',
     isEnabled: () => enabled,
     setEnabled,
     toggle: () => setEnabled(!enabled),
@@ -573,11 +893,15 @@ function mountDomLocalization(dictPayload) {
 module.exports = {
   STORAGE_KEY,
   SKIP_ANCESTOR_SELECTORS,
+  PROSE_CONTAINER_SELECTORS,
   ISOLATED_CONTROL_SELECTORS,
   DYNAMIC_RULES,
+  isAllowedLocalizationOrigin,
   normalizeText,
   shouldSkipElement,
+  isInProseOrMessageContainer,
   isIsolatedUiControl,
+  replaceBoundedLongEntry,
   createTranslator,
   mountDomLocalization,
 };

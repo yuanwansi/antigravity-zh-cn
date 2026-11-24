@@ -27,6 +27,7 @@ const {
   isProtectedEnvironment,
 } = require('./paths');
 const { loadDictionaries } = require('./dict-loader');
+const { buildMainProcessPatches } = require('./main-patches');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_DICT_DIR = path.join(PROJECT_ROOT, 'dicts');
@@ -272,10 +273,17 @@ function installPatch(options = {}) {
   };
   const patchedPreload = cleanPreload + buildInjectionBundle(runtimeSource, compiledDict);
 
-  // 4. 增量重打包到临时文件并回读校验
+  // 4. 构建可选主进程原生菜单/托盘/右键菜单/更新器补丁（均带 vm.Script 语法预检）
+  const baseEntries = new Set(listAsarEntries(baseAsarPath).filter((e) => !e.unpacked).map((e) => e.path));
+  const mainPatchResult = buildMainProcessPatches((relPath) =>
+    baseEntries.has(relPath) ? readAsarFile(baseAsarPath, relPath) : null
+  );
+
+  // 5. 增量重打包到临时文件并回读校验
   try {
     patchAsar(baseAsarPath, sidecars.tmpPath, {
       overrides: {
+        ...mainPatchResult.overrides,
         [preloadEntry]: Buffer.from(patchedPreload, 'utf8'),
       },
     });
@@ -286,7 +294,7 @@ function installPatch(options = {}) {
       throw new Error('重打包校验失败：未在新 ASAR 的 preload 中发现注入标记');
     }
 
-    // 5. 原子替换生效
+    // 6. 原子替换生效
     atomicSwapFile(asarPath, sidecars.tmpPath, sidecars.swapOldPath);
   } catch (err) {
     if (fs.existsSync(sidecars.tmpPath)) {
@@ -295,11 +303,12 @@ function installPatch(options = {}) {
     throw err;
   }
 
-  // 6. 写入校验清单
+  // 7. 写入校验清单
   const meta = {
     toolVersion: pkg.version,
     installedAt: new Date().toISOString(),
     preloadEntry,
+    mainPatchedFiles: mainPatchResult.patchedFiles,
     dictEntriesCount: dictResult.stats.total,
     originalSha256,
     patchedSha256: sha256File(asarPath),
