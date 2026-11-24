@@ -73,6 +73,13 @@ test('翻译器：动态正则模板正确处理计数、耗时与额度重置�
   assert.equal(translator.translateText('Good evening, Alex!'), '晚上好，Alex');
   assert.equal(translator.translateText('Leaving on Nov 30, 2026'), '将于 2026 年 11 月 30 日下线');
   assert.equal(translator.translateText('5-hour limit, resets in 3h 20m'), '5 小时配额限制，3 小时 20 分钟后重置');
+  assert.equal(translator.translateText('now', { isIsolated: true }), '刚刚');
+  assert.equal(translator.translateText('2m', { isIsolated: true }), '2分钟前');
+  assert.equal(translator.translateText('5h', { isIsolated: true }), '5小时前');
+  assert.equal(translator.translateText('3d', { isIsolated: true }), '3天前');
+  // 非独立控件上下文中不误译紧凑短串
+  assert.equal(translator.translateText('now', { isIsolated: false }), null);
+  assert.equal(translator.translateText('2m', { isIsolated: false }), null);
   assert.equal(translator.translateText('2 agents running'), '2 个智能体运行中');
   assert.equal(translator.translateText('Updated 5m ago'), '更新于 5 分钟前');
   assert.equal(translator.translateText('Every Monday at 9:00 AM'), '每周一 9:00 AM');

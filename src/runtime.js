@@ -76,6 +76,7 @@ const ISOLATED_CONTROL_SELECTORS = [
   'button',
   'a',
   'label',
+  'time',
   'th',
   'dt',
   'legend',
@@ -103,7 +104,7 @@ const ISOLATED_CONTROL_SELECTORS = [
 /**
  * 独立叶节点标签标签名集合（React/Tailwind 常用于构建侧边栏项、状态徽章、分组标题）。
  */
-const STANDALONE_LEAF_TAGS = new Set(['DIV', 'SPAN', 'TD', 'DD', 'HEADER', 'NAV', 'ASIDE']);
+const STANDALONE_LEAF_TAGS = new Set(['DIV', 'SPAN', 'TIME', 'TD', 'DD', 'HEADER', 'NAV', 'ASIDE']);
 
 const WEEKDAY_MAP = {
   monday: '周一',
@@ -257,7 +258,29 @@ const DYNAMIC_RULES = [
     replace: (_, s) => `思考中 ${s} 秒`,
   },
 
-  // 3. 相对时间与更新时间戳
+  // 3. 相对时间与更新时间戳（含侧边栏紧凑格式 now / 2m / 5h / 3d / 1w / 2mo / 1y）
+  {
+    pattern: /^now$/i,
+    onlyIsolated: true,
+    replace: () => '刚刚',
+  },
+  {
+    pattern: /^(\d+)\s*(s|m|h|d|w|mo|yr|y)$/,
+    onlyIsolated: true,
+    replace: (_, n, unit) => {
+      const unitMap = {
+        s: '秒前',
+        m: '分钟前',
+        h: '小时前',
+        d: '天前',
+        w: '周前',
+        mo: '个月前',
+        yr: '年前',
+        y: '年前',
+      };
+      return `${n}${unitMap[unit] || unit}`;
+    },
+  },
   {
     pattern: /^(?:Updated\s+)?(\d+)\s*(?:seconds?|secs?|s)\s+ago$/i,
     replace: (full, n) => (/^Updated/i.test(full) ? `更新于 ${n} 秒前` : `${n} 秒前`),
@@ -676,6 +699,7 @@ function createTranslator(dictPayload) {
     // 3. 动态正则模板（不在散文段落内触发，防止误改聊天内容）
     if (!ctx.inProse) {
       for (const rule of DYNAMIC_RULES) {
+        if (rule.onlyIsolated && !ctx.isIsolated) continue;
         const match = normalized.match(rule.pattern);
         if (match) {
           const replaced = rule.replace(...match);

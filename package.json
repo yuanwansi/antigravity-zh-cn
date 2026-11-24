@@ -1,6 +1,6 @@
 {
   "name": "antigravity-zh-cn",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Google Antigravity 桌面端动态中文汉化引擎与官方标准中文插件（零依赖、安全备份、无损还原）",
   "main": "src/patcher.js",
   "bin": {
