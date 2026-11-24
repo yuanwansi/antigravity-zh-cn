@@ -1,0 +1,20 @@
+name: 🐛 安装或运行问题反馈
+description: 安装、还原脚本报错或界面显示异常反馈
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: env
+    attributes:
+      label: 操作系统与 Node.js 版本
+      placeholder: "Windows 11 / Node v20.x / antigravity-zh-cn v1.2.2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 现象与终端报错信息
+      description: 请粘贴运行脚本或 `node bin/cli.js status` 的输出信息
+    validations:
+      required: true

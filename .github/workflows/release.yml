@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate dictionaries & run tests
+        run: |
+          npm run check:dict
+          npm test
+
+      - name: Build portable zip archive
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKG_DIR="antigravity-zh-cn-${TAG}"
+          mkdir -p "${PKG_DIR}"
+          cp -r bin dicts plugin scripts src LICENSE README.md README.en.md THIRD_PARTY_NOTICES.md package.json "${PKG_DIR}/"
+          zip -r "antigravity-zh-cn-${TAG}.zip" "${PKG_DIR}"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: antigravity-zh-cn-${{ github.ref_name }}.zip
+          generate_release_notes: true

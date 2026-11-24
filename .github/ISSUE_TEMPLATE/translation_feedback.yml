@@ -1,0 +1,30 @@
+name: 🈶 漏翻 / 误译截图反馈
+description: 发现还未翻译的英文界面文案，或觉得某处中文译法不够自然？贴图告诉我们！
+title: "[词条反馈] "
+labels: ["translation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢帮助完善 `antigravity-zh-cn`！直接粘贴界面截图即可，我们会尽快补充并发布新版本。
+
+  - type: input
+    id: client_version
+    attributes:
+      label: Antigravity 客户端版本与系统
+      description: 例如：Antigravity 2.35.0 / Windows 11
+      placeholder: "Antigravity 2.35.0 / Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: untranslated_text
+    attributes:
+      label: 漏翻或需要优化的原文与截图
+      description: 可直接 Ctrl+V 粘贴截图，或贴出对应的英文原文与你建议的中文译法
+      placeholder: |
+        - 英文原文：
+        - 建议译文（可选）：
+        - 界面截图（可直接粘贴）：
+    validations:
+      required: true
