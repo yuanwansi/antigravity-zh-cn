@@ -2,6 +2,7 @@
 
 **Google Antigravity 桌面端动态中文汉化引擎 + 官方标准中文交互插件（双形态、零第三方依赖、安全备份与字节级无损还原）**
 
+[![CI](https://github.com/yuanwansi/antigravity-zh-cn/actions/workflows/ci.yml/badge.svg)](https://github.com/yuanwansi/antigravity-zh-cn/actions/workflows/ci.yml)
 [![Node.js >= 18](https://img.shields.io/badge/Node.js-%3E%3D18-brightgreen)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -102,7 +103,7 @@ antigravity-zh-cn/
 ├── plugin/antigravity-zh-cn/           # 符合官方规范的 Antigravity 中文助手插件
 ├── scripts/                            # Windows / macOS / Linux 一键安装与还原脚本
 ├── test/                               # 基于 node:test 的全链路单元测试与模拟端到端测试
-└── docs/ci.example.yml                 # 跨平台 GitHub Actions CI 模板（可复制到 .github/workflows/ci.yml 启用）
+└── .github/workflows/ci.yml            # 跨平台 GitHub Actions CI（Windows / macOS / Linux）
 ```
 
 ---
