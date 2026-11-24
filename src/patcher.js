@@ -68,19 +68,32 @@ function detectPreloadEntry(asarPath) {
 }
 
 /**
- * 构造注入 preload.js 末尾的极简加载片段。
- * @param {string} runtimeRelRequire
+ * 构造完全自包含的内联 IIFE 注入代码（零相对 require，兼容 Electron sandbox: true 与非沙盒 preload）。
+ * @param {string} runtimeSource
+ * @param {object} compiledDict
  * @returns {string}
  */
-function buildInjectionSnippet(runtimeRelRequire) {
+function buildInjectionBundle(runtimeSource, compiledDict) {
+  const dictJson = JSON.stringify(compiledDict);
   return [
     '',
     MARKER_START,
-    `try { require(${JSON.stringify(runtimeRelRequire)}); } catch (__agZhCnErr) {`,
-    `  if (typeof console !== 'undefined' && console.warn) {`,
-    `    console.warn('[antigravity-zh-cn] 汉化运行时加载失败:', __agZhCnErr);`,
-    `  }`,
-    `}`,
+    ';(function () {',
+    '  try {',
+    '    var __agModule = { exports: {} };',
+    '    (function (module, exports) {',
+    runtimeSource,
+    '    })(__agModule, __agModule.exports);',
+    `    var __agDict = ${dictJson};`,
+    '    if (__agModule.exports && typeof __agModule.exports.mountDomLocalization === "function") {',
+    '      __agModule.exports.mountDomLocalization(__agDict);',
+    '    }',
+    '  } catch (__agZhCnErr) {',
+    '    if (typeof console !== "undefined" && console.warn) {',
+    '      console.warn("[antigravity-zh-cn] 汉化运行时启动失败:", __agZhCnErr);',
+    '    }',
+    '  }',
+    '})();',
     MARKER_END,
     '',
   ].join('\n');
@@ -247,42 +260,31 @@ function installPatch(options = {}) {
     baseAsarPath = sidecars.backupPath;
   }
 
-  // 3. 准备注入内容与独立运行时/词典文件
+  // 3. 构造完全自包含的内联 IIFE 注入包（不依赖外部相对 require，兼容 Electron sandbox: true）
   const preloadEntry = detectPreloadEntry(baseAsarPath);
-  const preloadDir = path.posix.dirname(preloadEntry);
-  const runtimeEntry = preloadDir === '.' ? 'antigravity-zh-cn-runtime.js' : `${preloadDir}/antigravity-zh-cn-runtime.js`;
-  const dictEntry = preloadDir === '.' ? 'antigravity-zh-cn-dict.json' : `${preloadDir}/antigravity-zh-cn-dict.json`;
-
   const cleanPreload = stripExistingInjection(readAsarFile(baseAsarPath, preloadEntry).toString('utf8'));
-  const patchedPreload = cleanPreload + buildInjectionSnippet('./antigravity-zh-cn-runtime.js');
   const runtimeSource = fs.readFileSync(RUNTIME_SOURCE_PATH, 'utf8');
-  const compiledDictJson = JSON.stringify(
-    {
-      version: pkg.version,
-      generatedAt: new Date().toISOString(),
-      entries: dictResult.entries,
-      isolatedKeys: dictResult.isolatedKeys,
-    },
-    null,
-    2
-  );
+  const compiledDict = {
+    version: pkg.version,
+    generatedAt: new Date().toISOString(),
+    entries: dictResult.entries,
+    isolatedKeys: dictResult.isolatedKeys,
+  };
+  const patchedPreload = cleanPreload + buildInjectionBundle(runtimeSource, compiledDict);
 
   // 4. 增量重打包到临时文件并回读校验
   try {
     patchAsar(baseAsarPath, sidecars.tmpPath, {
       overrides: {
         [preloadEntry]: Buffer.from(patchedPreload, 'utf8'),
-        [runtimeEntry]: Buffer.from(runtimeSource, 'utf8'),
-        [dictEntry]: Buffer.from(compiledDictJson, 'utf8'),
       },
     });
 
-    // 校验新 ASAR 可正常读取且包含预期注入文件
+    // 校验新 ASAR 可正常读取且包含预期注入标记
     const verifyPreload = readAsarFile(sidecars.tmpPath, preloadEntry).toString('utf8');
     if (!hasInjectionMarker(verifyPreload)) {
       throw new Error('重打包校验失败：未在新 ASAR 的 preload 中发现注入标记');
     }
-    JSON.parse(readAsarFile(sidecars.tmpPath, dictEntry).toString('utf8'));
 
     // 5. 原子替换生效
     atomicSwapFile(asarPath, sidecars.tmpPath, sidecars.swapOldPath);
@@ -298,8 +300,6 @@ function installPatch(options = {}) {
     toolVersion: pkg.version,
     installedAt: new Date().toISOString(),
     preloadEntry,
-    runtimeEntry,
-    dictEntry,
     dictEntriesCount: dictResult.stats.total,
     originalSha256,
     patchedSha256: sha256File(asarPath),
@@ -379,7 +379,7 @@ module.exports = {
   MARKER_START,
   MARKER_END,
   detectPreloadEntry,
-  buildInjectionSnippet,
+  buildInjectionBundle,
   stripExistingInjection,
   hasInjectionMarker,
   getPatchStatus,

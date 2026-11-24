@@ -16,7 +16,7 @@
     "check:dict": "node bin/cli.js check-dict",
     "plugin:install": "node bin/cli.js install-plugin",
     "plugin:uninstall": "node bin/cli.js uninstall-plugin",
-    "test": "node --test test"
+    "test": "node --test test/asar.test.js test/dict.test.js test/runtime.test.js test/patcher.test.js"
   },
   "keywords": [
     "antigravity",

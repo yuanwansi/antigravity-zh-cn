@@ -538,16 +538,6 @@ function mountDomLocalization(dictPayload) {
   return api;
 }
 
-// 当在 Electron preload 中直接通过 `require('./antigravity-zh-cn-runtime.js')` 加载时自动引导
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  try {
-    const bundledDict = require('./antigravity-zh-cn-dict.json');
-    mountDomLocalization(bundledDict);
-  } catch {
-    // 若在非打包测试环境下引入则不自动执行
-  }
-}
-
 module.exports = {
   STORAGE_KEY,
   SKIP_ANCESTOR_SELECTORS,

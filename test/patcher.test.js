@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { execFileSync } = require('node:child_process');
 
 const { createAsarFromMap, readAsarFile, sha256File } = require('../src/asar');
@@ -58,8 +59,29 @@ test('端到端补丁生命周期：首次安装 -> 重复升级 -> 校验防篡
 
     const preloadText = readAsarFile(asarPath, 'dist/preload.js').toString('utf8');
     assert.equal(preloadText.split(MARKER_START).length - 1, 1, 'preload 只能存在一次注入标记');
-    const bundledDict = JSON.parse(readAsarFile(asarPath, 'dist/antigravity-zh-cn-dict.json').toString('utf8'));
-    assert.equal(bundledDict.entries['Settings'], '设置');
+    assert.ok(preloadText.includes('"Settings":"设置"'), '内联词典应包含已编译的中文译文');
+
+    // 在无 require 的模拟 Electron 沙盒（sandbox: true）中执行注入后的 preload，验证可正常挂载
+    const mockListeners = {};
+    const mockWindow = {
+      addEventListener(type, fn) {
+        mockListeners[type] = fn;
+      },
+      localStorage: { getItem: () => null, setItem: () => {} },
+    };
+    const mockDoc = {
+      readyState: 'loading',
+      documentElement: null,
+      body: null,
+    };
+    vm.runInNewContext(preloadText, {
+      window: mockWindow,
+      document: mockDoc,
+      console: { log: () => {}, warn: () => {} },
+      setTimeout,
+    });
+    assert.equal(mockWindow.__ANTIGRAVITY_ZH_CN_MOUNTED__, true, '沙盒环境下内联汉化引擎必须成功挂载');
+    assert.ok(mockWindow.__ANTIGRAVITY_ZH_CN_API__.dictSize >= 200);
 
     // 2. 重复安装/升级词典（不应叠加重复标记）
     const reinstall = installPatch({
