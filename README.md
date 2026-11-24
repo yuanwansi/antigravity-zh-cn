@@ -124,8 +124,8 @@ antigravity-zh-cn/
 
 ## 参考与致谢
 
-本项目在架构设计、内容禁区隔离策略及安全备份还原实践上，参考并致谢以下优秀的 MIT 开源社区项目：
-- [Silas-02/antigravity-desktop-cn](https://github.com/Silas-02/antigravity-desktop-cn)（内容禁区隔离、独立控件守卫与模块分包词典规范思路）
+本项目在架构设计、内容禁区隔离策略、词典覆盖及安全备份还原实践上，参考并致谢以下优秀的 MIT 开源社区项目（完整第三方许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)）：
+- [Silas-02/antigravity-desktop-cn](https://github.com/Silas-02/antigravity-desktop-cn)（Antigravity 2.35.0 词典条目整合、内容禁区隔离与独立控件守卫思路）
 - [yiheng8023/antigravity-chinese](https://github.com/yiheng8023/antigravity-chinese)（跨平台路径探测、断电自愈守卫与双形态设计思路）
 
 ## 开源协议

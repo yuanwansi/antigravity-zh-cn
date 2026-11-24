@@ -250,7 +250,7 @@ function createTranslator(dictPayload) {
   function translateText(rawText, ctx = {}) {
     if (typeof rawText !== 'string') return null;
     const normalized = normalizeText(rawText);
-    if (!normalized || normalized.length > 260) return null;
+    if (!normalized || normalized.length > 1200) return null;
     // 跳过纯数字、路径、URL、纯符号
     if (/^[\d\s.,:%/+-]+$/.test(normalized)) return null;
     if (/^(https?:\/\/|file:\/\/|[a-zA-Z]:\\|\/[\w.-]+)/.test(normalized)) return null;
@@ -349,7 +349,7 @@ function mountDomLocalization(dictPayload) {
   const originalTextMap = new WeakMap();
   const originalAttrMap = new WeakMap();
   const trackedNodes = new Set();
-  const TRANSLATABLE_ATTRS = ['placeholder', 'title', 'aria-label'];
+  const TRANSLATABLE_ATTRS = ['placeholder', 'data-placeholder', 'title', 'aria-label'];
 
   let enabled = true;
   try {
@@ -379,7 +379,11 @@ function mountDomLocalization(dictPayload) {
   }
 
   function processElementAttrs(el) {
-    if (!el || el.nodeType !== 1 || shouldSkipElement(el)) return;
+    if (!el || el.nodeType !== 1) return;
+    const tag = el.tagName ? el.tagName.toUpperCase() : '';
+    const isInputPlaceholderHost =
+      tag === 'TEXTAREA' || tag === 'INPUT' || el.getAttribute('contenteditable') === 'true';
+    if (!isInputPlaceholderHost && shouldSkipElement(el)) return;
     let attrOriginals = originalAttrMap.get(el);
     for (const attr of TRANSLATABLE_ATTRS) {
       const val = el.getAttribute(attr);
@@ -407,8 +411,8 @@ function mountDomLocalization(dictPayload) {
     }
     if (root.nodeType !== 1 && root.nodeType !== 9) return;
     if (root.nodeType === 1) {
-      if (shouldSkipElement(root)) return;
       processElementAttrs(root);
+      if (shouldSkipElement(root)) return;
     }
 
     const doc = root.nodeType === 9 ? root : root.ownerDocument || document;

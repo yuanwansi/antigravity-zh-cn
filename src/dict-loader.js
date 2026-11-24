@@ -139,18 +139,6 @@ function loadDictionaries(dictDir, options = {}) {
         });
       }
 
-      // 句末英文句号一致性检查（避免无故吞掉或额外添加句号）
-      const keyEndsDot = key.endsWith('.') && !key.endsWith('...');
-      const valEndsCnDot = rawVal.trim().endsWith('。');
-      if (keyEndsDot && valEndsCnDot) {
-        issues.push({
-          severity: 'warn',
-          file: fileName,
-          key,
-          message: '源文以半角句点结尾，建议译文保持标点风格一致或核对上下文',
-        });
-      }
-
       keyOrigin.set(key, fileName);
       entries[key] = rawVal.trim();
     }
