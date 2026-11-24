@@ -384,6 +384,100 @@ function restorePatch(options = {}) {
   };
 }
 
+/**
+ * 只读巡检本机安装的 Antigravity 客户端版本、主进程钩子兼容性以及新增未覆盖 UI 文案。
+ * 供日常版本跟进维护与自动化巡检任务调用，绝不修改任何客户端文件。
+ * @param {{ target?: string, dictDir?: string }} [options]
+ */
+function auditClient(options = {}) {
+  const status = getPatchStatus({ target: options.target });
+  if (!status.found) {
+    return {
+      found: false,
+      clientVersion: null,
+      patched: false,
+      hooksOk: false,
+      mainPatchedFiles: [],
+      untranslatedLiterals: [],
+    };
+  }
+
+  // 若已安装汉化且存在纯净原版备份，优先对纯净备份进行静态扫描与钩子兼容性预演
+  const cleanSourceAsar =
+    status.patched && status.hasBackup ? status.backupPath : status.asarPath;
+
+  const entries = listAsarEntries(cleanSourceAsar);
+  const packedPaths = new Set(entries.filter((e) => !e.unpacked).map((e) => e.path));
+
+  let clientVersion = null;
+  if (packedPaths.has('package.json')) {
+    try {
+      const appPkg = JSON.parse(readAsarFile(cleanSourceAsar, 'package.json').toString('utf8'));
+      clientVersion = appPkg.version || null;
+    } catch {
+      clientVersion = null;
+    }
+  }
+
+  const preloadEntry = detectPreloadEntry(cleanSourceAsar);
+  const mainPreview = buildMainProcessPatches((relPath) =>
+    packedPaths.has(relPath) ? readAsarFile(cleanSourceAsar, relPath) : null
+  );
+
+  const dict = loadDictionaries(options.dictDir || DEFAULT_DICT_DIR, {
+    userDictPath: getUserCustomDictPath(),
+    strict: false,
+  });
+
+  // 排除内部调试与协议错误码前缀，仅汇报可能面向用户的界面文案
+  const internalNoiseRe = /^(?:SCRIPT_TIMEOUT|INTERRUPTED|PROTOCOL_VIOLATION|live preview unavailable|another script is|script run aborted|turn ended|user Stop|user hand back|RPC call failed)/i;
+  const propRegex = /\b(?:label|title|message|detail|buttonLabel|defaultLabel|placeholder|tooltip)\s*:\s*(['"])((?:\\.|(?!\1)[^\\\r\n]){2,140})\1/g;
+  const untranslated = [];
+  const seen = new Set();
+
+  for (const entry of entries) {
+    if (
+      entry.unpacked ||
+      !/^dist\/.*\.js$/.test(entry.path) ||
+      entry.path.includes('__mocks__') ||
+      entry.path.includes('/proto/')
+    ) {
+      continue;
+    }
+    const src = readAsarFile(cleanSourceAsar, entry.path).toString('utf8');
+    let m;
+    while ((m = propRegex.exec(src)) !== null) {
+      const val = m[2].replace(/\\'/g, "'").replace(/\\"/g, '"').trim();
+      if (!val || !/[A-Za-z]{2,}/.test(val)) continue;
+      if (/^[a-z0-9_.:/-]+$/.test(val)) continue;
+      if (internalNoiseRe.test(val)) continue;
+      if (!dict.entries[val] && !seen.has(val)) {
+        seen.add(val);
+        untranslated.push({ file: entry.path, text: val });
+      }
+    }
+  }
+
+  const expectedHooks = ['dist/menu.js', 'dist/tray.js', 'dist/ipcHandlers.js', 'dist/updater.js'].filter((p) =>
+    packedPaths.has(p)
+  );
+
+  return {
+    found: true,
+    asarPath: status.asarPath,
+    inspectedAsar: cleanSourceAsar,
+    clientVersion,
+    patched: status.patched,
+    installedToolVersion: status.meta ? status.meta.toolVersion : null,
+    preloadEntry,
+    expectedMainHooks: expectedHooks,
+    mainPatchedFiles: mainPreview.patchedFiles,
+    hooksOk: Boolean(preloadEntry) && mainPreview.patchedFiles.length === expectedHooks.length,
+    untranslatedCount: untranslated.length,
+    untranslatedLiterals: untranslated,
+  };
+}
+
 module.exports = {
   MARKER_START,
   MARKER_END,
@@ -394,4 +488,5 @@ module.exports = {
   getPatchStatus,
   installPatch,
   restorePatch,
+  auditClient,
 };

@@ -15,7 +15,7 @@
 
 const path = require('path');
 const pkg = require('../package.json');
-const { getPatchStatus, installPatch, restorePatch } = require('../src/patcher');
+const { getPatchStatus, installPatch, restorePatch, auditClient } = require('../src/patcher');
 const { loadDictionaries } = require('../src/dict-loader');
 const {
   installStandardPlugin,
@@ -69,6 +69,7 @@ function printHelp() {
   install            安装/升级桌面端中文汉化（自动备份原版 app.asar）
   restore            校验备份并字节级无损还原官方英文原版
   status             查看桌面端汉化状态与标准中文插件状态
+  audit-client       只读巡检本机客户端版本、钩子兼容性与新增未翻译文案
   check-dict         校验内置词典与用户自定义词典的格式、重复键与安全规范
   install-plugin     安装官方标准中文交互插件到 ~/.gemini/config/plugins/
   uninstall-plugin   卸载官方标准中文交互插件
@@ -146,6 +147,27 @@ function main() {
         console.log('\n=== 官方标准中文插件状态 ===');
         console.log(`安装状态: ${plugin.installed ? '已安装' : '未安装'}`);
         console.log(`插件路径: ${plugin.targetDir}`);
+        return;
+      }
+
+      case 'audit-client': {
+        const report = auditClient({ target: flags.target });
+        if (flags.json) {
+          console.log(JSON.stringify(report, null, 2));
+          return;
+        }
+        if (!report.found) {
+          console.log('未在本机探测到 Antigravity 客户端 app.asar。');
+          return;
+        }
+        console.log(`客户端版本: ${report.clientVersion || '未知'}`);
+        console.log(`当前状态  : ${report.patched ? `已汉化 (v${report.installedToolVersion || '?'})` : '官方英文原版（可能需要重新应用汉化）'}`);
+        console.log(`Preload   : ${report.preloadEntry}`);
+        console.log(`主进程钩子: ${report.mainPatchedFiles.length}/${report.expectedMainHooks.length} 兼容 (${report.mainPatchedFiles.join(', ')})`);
+        console.log(`新增未译项: ${report.untranslatedCount} 条`);
+        for (const item of report.untranslatedLiterals.slice(0, 25)) {
+          console.log(`  - [${item.file}] ${JSON.stringify(item.text)}`);
+        }
         return;
       }
 

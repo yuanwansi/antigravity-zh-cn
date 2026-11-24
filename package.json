@@ -13,6 +13,7 @@
     "install:cn": "node bin/cli.js install",
     "restore:en": "node bin/cli.js restore",
     "status": "node bin/cli.js status",
+    "audit:client": "node bin/cli.js audit-client",
     "check:dict": "node bin/cli.js check-dict",
     "plugin:install": "node bin/cli.js install-plugin",
     "plugin:uninstall": "node bin/cli.js uninstall-plugin",
