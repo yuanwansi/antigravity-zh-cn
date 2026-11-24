@@ -9,6 +9,7 @@ const {
   isAllowedLocalizationOrigin,
   shouldSkipElement,
   isIsolatedUiControl,
+  mountDomLocalization,
 } = require('../src/runtime');
 
 const DICT_DIR = path.resolve(__dirname, '..', 'dicts');
@@ -61,7 +62,17 @@ test('翻译器：动态正则模板正确处理计数、耗时与额度重置�
     translator.translateText('Welcome back, 院丸寺. Where should we pick up?'),
     '欢迎回来，院丸寺。我们从哪里继续？'
   );
+  assert.equal(
+    translator.translateText('Hey 院丸寺, what should we build today?'),
+    '嗨，院丸寺，今天我们构建点什么？'
+  );
+  assert.equal(
+    translator.translateText('Hi 院丸寺, what can we get done today?'),
+    '你好，院丸寺，今天我们可以完成些什么？'
+  );
   assert.equal(translator.translateText('Good evening, Alex!'), '晚上好，Alex');
+  assert.equal(translator.translateText('Leaving on Nov 30, 2026'), '将于 2026 年 11 月 30 日下线');
+  assert.equal(translator.translateText('5-hour limit, resets in 3h 20m'), '5 小时配额限制，3 小时 20 分钟后重置');
   assert.equal(translator.translateText('2 agents running'), '2 个智能体运行中');
   assert.equal(translator.translateText('Updated 5m ago'), '更新于 5 分钟前');
   assert.equal(translator.translateText('Every Monday at 9:00 AM'), '每周一 9:00 AM');
@@ -126,4 +137,79 @@ test('禁区隔离与独立控件守卫：保护代码块、用户输入、文�
   // 过长的段落即使包在按钮内也不视为短标签
   assert.equal(isIsolatedUiControl(makeMockEl(['button'], 'A'.repeat(80))), false);
   assert.equal(isIsolatedUiControl(makeMockEl(['div'], 'Save')), false);
+});
+
+test('React JSX 多文本插值节点（如 Hey {name}, what should we build today?）合并翻译与无损还原', () => {
+  const t1 = { nodeType: 3, nodeValue: 'Hey ', parentElement: null };
+  const t2 = { nodeType: 3, nodeValue: '院丸寺', parentElement: null };
+  const t3 = { nodeType: 3, nodeValue: ', what should we build today?', parentElement: null };
+
+  const heading = {
+    nodeType: 1,
+    tagName: 'H1',
+    className: '',
+    childNodes: [t1, t2, t3],
+    get textContent() {
+      return this.childNodes.map((c) => c.nodeValue).join('');
+    },
+    getAttribute: () => null,
+    setAttribute: () => {},
+    closest(sel) {
+      return sel === 'h1' ? this : null;
+    },
+  };
+  t1.parentElement = heading;
+  t2.parentElement = heading;
+  t3.parentElement = heading;
+
+  const allNodes = [heading, t1, t2, t3];
+  const mockDoc = {
+    nodeType: 9,
+    readyState: 'complete',
+    body: {
+      nodeType: 1,
+      tagName: 'BODY',
+      className: '',
+      childNodes: [heading],
+      getAttribute: () => null,
+      setAttribute: () => {},
+      closest: () => null,
+      ownerDocument: null,
+    },
+    createTreeWalker() {
+      let idx = -1;
+      return {
+        nextNode() {
+          idx += 1;
+          return idx < allNodes.length ? allNodes[idx] : null;
+        },
+      };
+    },
+  };
+  mockDoc.body.ownerDocument = mockDoc;
+  heading.ownerDocument = mockDoc;
+
+  const prevWin = global.window;
+  const prevDoc = global.document;
+  global.window = {
+    location: { protocol: 'http:', hostname: '127.0.0.1' },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    addEventListener: () => {},
+  };
+  global.document = mockDoc;
+
+  try {
+    const api = mountDomLocalization({ entries: {}, isolatedKeys: [] });
+    assert.equal(heading.textContent, '嗨，院丸寺，今天我们构建点什么？');
+
+    // 验证按 Alt + Shift + L（toggle）可无损还原全部 3 个原始 TextNode
+    api.toggle();
+    assert.equal(heading.textContent, 'Hey 院丸寺, what should we build today?');
+    assert.equal(t1.nodeValue, 'Hey ');
+    assert.equal(t2.nodeValue, '院丸寺');
+    assert.equal(t3.nodeValue, ', what should we build today?');
+  } finally {
+    global.window = prevWin;
+    global.document = prevDoc;
+  }
 });

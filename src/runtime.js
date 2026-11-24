@@ -122,38 +122,101 @@ const WEEKDAY_MAP = {
   sun: '周日',
 };
 
+const MONTH_MAP = {
+  january: 1, jan: 1,
+  february: 2, feb: 2,
+  march: 3, mar: 3,
+  april: 4, apr: 4,
+  may: 5,
+  june: 6, jun: 6,
+  july: 7, jul: 7,
+  august: 8, aug: 8,
+  september: 9, sep: 9, sept: 9,
+  october: 10, oct: 10,
+  november: 11, nov: 11,
+  december: 12, dec: 12,
+};
+
+const GREETING_PREFIX_MAP = [
+  { re: /^Welcome back$/i, fn: (name) => `欢迎回来，${name}` },
+  { re: /^Welcome$/i, fn: (name) => `欢迎，${name}` },
+  { re: /^Good morning$/i, fn: (name) => `早上好，${name}` },
+  { re: /^Good afternoon$/i, fn: (name) => `下午好，${name}` },
+  { re: /^Good evening$/i, fn: (name) => `晚上好，${name}` },
+  { re: /^(?:Good|Nice|Great) to see you(?: again)?$/i, fn: (name) => `很高兴见到你，${name}` },
+  { re: /^Hey(?: there)?$/i, fn: (name) => `嗨，${name}` },
+  { re: /^Hi(?: there)?$/i, fn: (name) => `你好，${name}` },
+  { re: /^Hello(?: there)?$/i, fn: (name) => `你好，${name}` },
+];
+
+const GREETING_QUESTION_MAP = [
+  { re: /^where should we pick up\??$/i, text: '我们从哪里继续？' },
+  { re: /^where should we (?:start|begin)\??$/i, text: '我们从哪里开始？' },
+  { re: /^what should we build(?: today)?\??$/i, text: '今天我们构建点什么？' },
+  { re: /^what are we building(?: today)?\??$/i, text: '今天我们要构建什么？' },
+  { re: /^what would you like to build(?: today)?\??$/i, text: '今天想构建点什么？' },
+  { re: /^what (?:can|should) we get done(?: today)?\??$/i, text: '今天我们可以完成些什么？' },
+  { re: /^what (?:are we|should we) work(?:ing)? on(?: today)?\??$/i, text: '今天我们要推进什么任务？' },
+  { re: /^what would you like to work on(?: today)?\??$/i, text: '今天想处理什么任务？' },
+  { re: /^(?:what can i help(?: you)? with|how can i help(?: you)?)(?: today)?\??$/i, text: '今天有什么可以帮你的？' },
+  { re: /^what'?s on your mind(?: today)?\??$/i, text: '今天有什么想法？' },
+  { re: /^what'?s next\??$/i, text: '接下来做什么？' },
+  { re: /^ready to (?:build|start|dive in|code|ship)\??$/i, text: '准备好开始了吗？' },
+];
+
+/**
+ * 组合式欢迎语翻译器：覆盖任意「问候前缀 + 用户名 + 引导问题」的随机抽签组合。
+ * 例如：
+ *   - "Hey 院丸寺, what should we build today?"
+ *   - "Hi 院丸寺, what can we get done today?"
+ *   - "Welcome back, 院丸寺. Where should we pick up?"
+ * @param {string} normalized
+ * @returns {string|null}
+ */
+function translateWelcomeGreeting(normalized) {
+  // 1. 纯引导问题（不含用户名）
+  for (const q of GREETING_QUESTION_MAP) {
+    if (q.re.test(normalized) && /\?$/.test(normalized)) {
+      return q.text;
+    }
+  }
+
+  // 2. 问候前缀 + 用户名 + 可选后续引导问题
+  const m = normalized.match(
+    /^(Welcome back|Welcome|Good morning|Good afternoon|Good evening|(?:Good|Nice|Great) to see you(?: again)?|Hey(?: there)?|Hi(?: there)?|Hello(?: there)?)(?:,\s*|\s+)([^,.!?]{1,40}?)(?:([,.!])\s*(.+)|[.!]?)$/i
+  );
+  if (!m) return null;
+
+  const [, rawPrefix, rawName, sep, rawRest] = m;
+  const name = rawName.trim();
+  if (!name) return null;
+
+  const prefixEntry = GREETING_PREFIX_MAP.find((p) => p.re.test(rawPrefix.trim()));
+  if (!prefixEntry) return null;
+  const head = prefixEntry.fn(name);
+
+  if (!rawRest) {
+    return head;
+  }
+
+  const rest = rawRest.trim();
+  for (const q of GREETING_QUESTION_MAP) {
+    if (q.re.test(rest)) {
+      const joiner = sep === '.' || sep === '!' ? '。' : '，';
+      return `${head}${joiner}${q.text}`;
+    }
+  }
+  return null;
+}
+
 /**
  * 动态模板正则规则（全部采用全串锚定 `^...$`，防止误伤普通句子）。
  */
 const DYNAMIC_RULES = [
-  // 1. 欢迎页动态问候语
+  // 1. 组合式欢迎页动态问候语
   {
-    pattern: /^Welcome back,\s*(.+?)\.\s*Where should we pick up\?$/i,
-    replace: (_, name) => `欢迎回来，${name}。我们从哪里继续？`,
-  },
-  {
-    pattern: /^Welcome back,\s*(.+?)\.\s*What are we building today\?$/i,
-    replace: (_, name) => `欢迎回来，${name}。今天想构建点什么？`,
-  },
-  {
-    pattern: /^Welcome back,\s*(.+?)[.!]?$/i,
-    replace: (_, name) => `欢迎回来，${name}`,
-  },
-  {
-    pattern: /^Good morning,\s*(.+?)[.!]?$/i,
-    replace: (_, name) => `早上好，${name}`,
-  },
-  {
-    pattern: /^Good afternoon,\s*(.+?)[.!]?$/i,
-    replace: (_, name) => `下午好，${name}`,
-  },
-  {
-    pattern: /^Good evening,\s*(.+?)[.!]?$/i,
-    replace: (_, name) => `晚上好，${name}`,
-  },
-  {
-    pattern: /^(?:Hi|Hello),\s*(.+?)\.\s*What can I help you with\?$/i,
-    replace: (_, name) => `你好，${name}。有什么我可以帮你的？`,
+    pattern: /^(?:Welcome|Good |Nice |Great |Hey|Hi|Hello|Where should|What |How can|Ready to).+/i,
+    replace: (full) => translateWelcomeGreeting(full),
   },
 
   // 2. 运行/思考/检索耗时状态
@@ -336,6 +399,48 @@ const DYNAMIC_RULES = [
   {
     pattern: /^Every\s+(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+at\s+([\d:]+\s*(?:AM|PM)?)$/i,
     replace: (_, day, t) => `每${WEEKDAY_MAP[day.toLowerCase()] || day} ${t}`,
+  },
+
+  // 7. 配额窗口限制、模型下线提示与权限授权操作
+  {
+    pattern: /^(Weekly|5-hour|Five Hour|5h)\s+limit,\s*(resets|refreshes)\s+in\s+(.+?)\.?$/i,
+    replace: (_, win, act, rest) => {
+      const label = /^weekly$/i.test(win) ? '每周配额限制' : '5 小时配额限制';
+      const verb = /^refreshes$/i.test(act) ? '刷新' : '重置';
+      const dur = rest
+        .replace(/(\d+)\s*d(?:ays?)?/gi, '$1 天')
+        .replace(/(\d+)\s*h(?:ours?)?/gi, '$1 小时')
+        .replace(/(\d+)\s*m(?:in(?:ute)?s?)?/gi, '$1 分钟')
+        .replace(/(\d+)\s*s(?:ec(?:ond)?s?)?/gi, '$1 秒')
+        .replace(/^<\s*1\s*分钟$/, '不足 1 分钟');
+      return `${label}，${dur}后${verb}`;
+    },
+  },
+  {
+    pattern: /^(\d+(?:\.\d+)?)%\s+left$/i,
+    replace: (_, pct) => `剩余 ${pct}%`,
+  },
+  {
+    pattern: /^Your\s+Plan:\s*(.+)$/i,
+    replace: (_, plan) => `当前订阅方案: ${plan}`,
+  },
+  {
+    pattern: /^Leaving\s+on\s+(January|Jan|February|Feb|March|Mar|April|Apr|May|June|Jun|July|Jul|August|Aug|September|Sep|Sept|October|Oct|November|Nov|December|Dec)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(\d{4}))?\.?$/i,
+    replace: (_, mon, day, yr) => {
+      const mNum = MONTH_MAP[mon.toLowerCase()] || mon;
+      return yr ? `将于 ${yr} 年 ${mNum} 月 ${day} 日下线` : `将于 ${mNum} 月 ${day} 日下线`;
+    },
+  },
+  {
+    pattern: /^Repo\s+default(?:\s*\((.+?)\))?$/i,
+    replace: (_, br) => (br ? `仓库默认 (${br})` : '仓库默认'),
+  },
+  {
+    pattern: /^Yes,\s*and\s+always\s+allow\s+'(.+?)'\s+in\s+this\s+(project|workspace|conversation)$/i,
+    replace: (_, cmd, scope) => {
+      const sMap = { project: '项目', workspace: '工作区', conversation: '对话' };
+      return `是，且在此${sMap[scope.toLowerCase()] || scope}中始终允许运行 '${cmd}'`;
+    },
   },
 ];
 
@@ -574,7 +679,9 @@ function createTranslator(dictPayload) {
         const match = normalized.match(rule.pattern);
         if (match) {
           const replaced = rule.replace(...match);
-          return preserveOuterWhitespace(rawText, replaced);
+          if (typeof replaced === 'string' && replaced) {
+            return preserveOuterWhitespace(rawText, replaced);
+          }
         }
       }
     }
@@ -697,6 +804,39 @@ function mountDomLocalization(dictPayload) {
     }
   }
 
+  /**
+   * 处理 React JSX 插值产生的纯多文本叶节点（如 `<h1>Hey {name}, what should we build today?</h1>`
+   * 在 DOM 中会生成 3 个相邻的 TextNode 子节点，逐个检查无法命中整体模板）。
+   * 仅当所有子节点均为纯文本节点（无任何子元素）时才合并匹配，绝不破坏子标签或图标。
+   */
+  function processMultiTextElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (shouldSkipElement(el) || isInProseOrMessageContainer(el)) return false;
+    const children = el.childNodes;
+    if (!children || children.length < 2 || children.length > 8) return false;
+
+    let fullText = '';
+    for (let i = 0; i < children.length; i += 1) {
+      if (children[i].nodeType !== 3) return false;
+      fullText += children[i].nodeValue || '';
+    }
+    if (!fullText.trim()) return false;
+
+    const isIsolated = isIsolatedUiControl(el);
+    const translated = translator.translateText(fullText, { isIsolated, inProse: false });
+    if (!translated || translated === fullText) return false;
+
+    for (let i = 0; i < children.length; i += 1) {
+      const child = children[i];
+      if (!originalTextMap.has(child)) {
+        originalTextMap.set(child, child.nodeValue || '');
+      }
+      child.nodeValue = i === 0 ? translated : '';
+      trackedNodes.add(child);
+    }
+    return true;
+  }
+
   function processElementAttrs(el) {
     if (!el || el.nodeType !== 1) return;
     const tag = el.tagName ? el.tagName.toUpperCase() : '';
@@ -752,6 +892,7 @@ function mountDomLocalization(dictPayload) {
         return;
       }
       if (shouldSkipElement(root)) return;
+      if (processMultiTextElement(root)) return;
     }
 
     const doc = root.nodeType === 9 ? root : root.ownerDocument || document;
@@ -762,6 +903,8 @@ function mountDomLocalization(dictPayload) {
         processElementAttrs(cur);
         if (cur.tagName === 'IFRAME') {
           tryAttachIframe(cur);
+        } else {
+          processMultiTextElement(cur);
         }
       } else if (cur.nodeType === 3) {
         processTextNode(cur);
@@ -815,7 +958,12 @@ function mountDomLocalization(dictPayload) {
 
   function scheduleRoot(node) {
     if (!enabled || !node) return;
-    pendingRoots.add(node);
+    // 若单个拆碎的 TextNode 发生变更，将其父元素一并加入待处理队列以支持 React 多文本插值重算
+    if (node.nodeType === 3 && node.parentElement) {
+      pendingRoots.add(node.parentElement);
+    } else {
+      pendingRoots.add(node);
+    }
     if (!rafScheduled) {
       rafScheduled = true;
       const schedule =
